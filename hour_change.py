@@ -4,30 +4,25 @@ import sys
 import prctl
 
 def drop_privileges():
-    # Vérifier si l'application est déjà exécutée avec les privilèges du superutilisateur
+    # Check if the application is already running with superuser privileges
     if os.getuid() == 0:
         try:
-            # Dropping les capabilities du superutilisateur
-            prctl.cap_effective.drop()
-            prctl.cap_permitted.drop()
-            prctl.cap_inheritable.drop()
-
-            # Définir explicitement les capabilities nécessaires (CAP_SYS_TIME) pour le changement de date et d'heure
+            # Explicitly set the required capabilities (CAP_SYS_TIME) for changing date and time
             prctl.cap_effective.limit(prctl.CAP_SYS_TIME)
             prctl.cap_permitted.limit(prctl.CAP_SYS_TIME)
         except PermissionError as e:
-            print("Impossible de réduire les privilèges du superutilisateur :", e)
+            print("Unable to drop superuser privileges:", e)
 
 def change_datetime(date_command, time_command):
-    # Exécuter les commandes en utilisant subprocess.Popen sans shell
+    # Execute the commands using subprocess.Popen without shell
     try:
         subprocess.Popen(date_command, shell=True)
         subprocess.Popen(time_command, shell=True)
     except ValueError as e:
-        print(f"Une erreur s'est produite lors de la modification de l'heure et de la date : {e}")
+        print(f"An error occurred while changing the date and time: {e}")
     except Exception as e:
-        print(f"Une erreur inattendue s'est produite lors de la modification de l'heure et de la date : {e}")
+        print(f"An unexpected error occurred while changing the date and time: {e}")
 
-# Abandonner les privilèges du superutilisateur avant d'appeler la fonction change_datetime
+# Drop superuser privileges before calling the change_datetime function
 drop_privileges()
-change_datetime(sys.argv[1],sys.argv[2])
+change_datetime(sys.argv[1], sys.argv[2])

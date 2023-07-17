@@ -5,137 +5,137 @@ import threading
 import subprocess
 import shlex
 
-# Menu qui affiche les options disponibles (afficher l'heure, afficher la date, afficher les deux, changer la date et l'heure)
+# Menu displaying available options (show time, show date, show both, change date and time)
 def menu_offline():
-    print("1 - Choisir le format")
-    print("2 - Afficher la date et l'heure")
-    print("3 - Changer la date et l'heure")
-    print("4 - Quitter\n\n")
+    print("1 - Choose format")
+    print("2 - Show date and time")
+    print("3 - Change date and time")
+    print("4 - Quit\n\n")
 
 def menu_online(client_socket):
-    client_socket.send("1 - Choisir le format\n".encode())
-    client_socket.send("2 - Afficher la date et l'heure\n".encode())
-    client_socket.send("3 - Quitter\n\n".encode())
+    client_socket.send("1 - Choose format\n".encode())
+    client_socket.send("2 - Show date and time\n".encode())
+    client_socket.send("3 - Quit\n\n".encode())
 
-################################ FONCTION OFFLINE ###############################
+################################ OFFLINE FUNCTION ###############################
 
 def get_format_offline():
-    date_format = input("Choisissez le format de la date (ex: %d/%m/%Y): ")
-    heure_format = input("Choisissez le format de l'heure (ex: %H:%M:%S): ")
-    return date_format, heure_format
+    date_format = input("Choose the date format (e.g., %d/%m/%Y): ")
+    time_format = input("Choose the time format (e.g., %H:%M:%S): ")
+    return date_format, time_format
 
 def change_date_time():
-    new_date = input("Entrez la nouvelle date (format YYYY-MM-DD) : ")
-    new_time = input("Entrez la nouvelle heure (format HH:MM:SS) : ")
-    date_format = input("Entrez le format de date souhaité : ")
-    time_format = input("Entrez le format d'heure souhaité : ")
+    new_date = input("Enter the new date (format YYYY-MM-DD): ")
+    new_time = input("Enter the new time (format HH:MM:SS): ")
+    date_format = input("Enter the desired date format: ")
+    time_format = input("Enter the desired time format: ")
     try:
-        # Vérification des entrées utilisateur pour éviter les injections de commandes
+        # Checking user inputs to avoid command injections
         if not all(isinstance(param, str) for param in [new_date, new_time, date_format, time_format]):
-            raise ValueError("Les paramètres de date, d'heure, de format et de format d'heure doivent être des chaînes de caractères.")
+            raise ValueError("Date, time, format, and time format parameters must be strings.")
 
-        # Échapper les caractères spéciaux dans les arguments de commande
+        # Escaping special characters in command arguments
         date = shlex.quote(new_date)
         time = shlex.quote(new_time)
 
-        # Construire les commandes pour changer la date et l'heure en utilisant le format spécifié
+        # Building commands to change the date and time using the specified format
         date_command = f"date -s '{date} {time}' +'{date_format}'"
         time_command = f"date -s '{time}' +'{time_format}'"
 
         subprocess.call(['sudo', 'python', '/home/dorian.neilz@SYS1.LOCAL/Documents/IMT/SecureCode/hour_change.py', date_command, time_command])
     except ValueError as e:
-        print(f"Une erreur s'est produite lors de la modification de l'heure et de la date : {e}")
+        print(f"An error occurred while changing the date and time: {e}")
     except Exception as e:
-        print(f"Une erreur inattendue s'est produite lors de la modification de l'heure et de la date : {e}")
+        print(f"An unexpected error occurred while changing the date and time: {e}")
 
 def get_time_offline():
     date_format = ""
-    heure_format = ""
+    time_format = ""
     while True:
         menu_offline()
-        choix = input("Choisissez une option: \n")
-        if choix == "1":
-            date_format, heure_format = get_format_offline()
-        elif choix == "2":
-            if date_format == "" or heure_format == "":
+        choice = input("Choose an option: \n")
+        if choice == "1":
+            date_format, time_format = get_format_offline()
+        elif choice == "2":
+            if date_format == "" or time_format == "":
                 date_format = "%d/%m/%Y"
-                heure_format = "%H:%M:%S"
-            maintenant = datetime.datetime.now()
-            date = maintenant.strftime(date_format)
-            heure = maintenant.strftime(heure_format)
+                time_format = "%H:%M:%S"
+            now = datetime.datetime.now()
+            date = now.strftime(date_format)
+            time = now.strftime(time_format)
             print(date)
-            print(heure)
-        elif choix == "3":
+            print(time)
+        elif choice == "3":
             change_date_time()
-        elif choix == "4":
+        elif choice == "4":
             break
         else:
-            print("Choix invalide\n")
+            print("Invalid choice\n")
 
 def run_offline_mode():
     get_time_offline()
 
-################################ FONCTION ONLINE ###############################
+################################ ONLINE FUNCTION ###############################
 
-# Fonction qui demande au client de choisir le format de la date et de l'heure
+# Function asking the client to choose the date and time format
 def get_format_online(client_socket):
-    client_socket.send("Choisissez le format de la date (ex: %d/%m/%Y): \n".encode())
+    client_socket.send("Choose the date format (e.g., %d/%m/%Y): \n".encode())
     date_format = client_socket.recv(1024).decode()
-    client_socket.send("Choisissez le format de l'heure (ex: %H:%M:%S): \n".encode())
-    heure_format = client_socket.recv(1024).decode()
-    return date_format, heure_format
+    client_socket.send("Choose the time format (e.g., %H:%M:%S): \n".encode())
+    time_format = client_socket.recv(1024).decode()
+    return date_format, time_format
 
-def get_time_online(client_socket, date_format, heure_format):
-    maintenant = datetime.datetime.now()
-    date = maintenant.strftime(date_format)
-    heure = maintenant.strftime(heure_format)
+def get_time_online(client_socket, date_format, time_format):
+    now = datetime.datetime.now()
+    date = now.strftime(date_format)
+    time = now.strftime(time_format)
     client_socket.send(date.encode())
-    client_socket.send('{}\n'.format(heure).encode())
+    client_socket.send('{}\n'.format(time).encode())
 
 def handle_online_client(client_socket):
     date_format = ""
-    heure_format = ""
+    time_format = ""
 
-    client_socket.send("Choisissez une option: \n\n".encode())
-    menu_online(client_socket)  # Afficher le menu une fois au début
+    client_socket.send("Choose an option: \n\n".encode())
+    menu_online(client_socket)  # Display the menu once at the beginning
 
     while True:
-        choix = client_socket.recv(1024).decode('utf-8').strip()
+        choice = client_socket.recv(1024).decode('utf-8').strip()
 
-        if choix == "1":
-            date_format, heure_format = get_format_online(client_socket)
-            menu_online(client_socket)  # Envoyer le menu après chaque commande
-        elif choix == "2":
-            if date_format == "" or heure_format == "":
+        if choice == "1":
+            date_format, time_format = get_format_online(client_socket)
+            menu_online(client_socket)  # Send the menu after each command
+        elif choice == "2":
+            if date_format == "" or time_format == "":
                 date_format = "%d/%m/%Y"
-                heure_format = "%H:%M:%S"
-            get_time_online(client_socket, date_format, heure_format)
-            menu_online(client_socket)  # Envoyer le menu après chaque commande
-        elif choix == "3":
+                time_format = "%H:%M:%S"
+            get_time_online(client_socket, date_format, time_format)
+            menu_online(client_socket)  # Send the menu after each command
+        elif choice == "3":
             client_socket.close()
             break
 
 def start_online_server(host, port):
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.bind((host, port))
-    server_socket.listen(5)  # Limite le nombre de connexions en attente à 5
+    server_socket.listen(5)  # Limit the number of pending connections to 5
 
-    server_socket.setblocking(0)  # Définit le socket en mode non bloquant
+    server_socket.setblocking(0)  # Set the socket to non-blocking mode
 
-    print("Serveur en écoute sur {}:{}".format(host, port))
+    print("Server listening on {}:{}".format(host, port))
 
-    inputs = [server_socket]  # Liste des sockets à surveiller
+    inputs = [server_socket]  # List of sockets to monitor
 
     while True:
-        # Utilise select pour vérifier si de nouvelles connexions sont disponibles
+        # Use select to check if new connections are available
         readable, _, _ = select.select(inputs, [], [])
 
         for sock in readable:
             if sock == server_socket:
-                # Nouvelle connexion entrante
+                # New incoming connection
                 client_socket, address = server_socket.accept()
-                print("Connexion de {}\n".format(address))
-                inputs.append(client_socket)  # Ajoute le nouveau socket à la liste des sockets surveillés
+                print("Connection from {}\n".format(address))
+                inputs.append(client_socket)  # Add the new socket to the monitored sockets list
                 threading.Thread(target=handle_online_client, args=(client_socket,)).start()
 
 ###########################################################################
