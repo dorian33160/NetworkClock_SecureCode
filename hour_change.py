@@ -1,28 +1,57 @@
-import os
-import subprocess
-import sys
+from datetime import datetime
+import ctypes
+import ctypes.util
 import prctl
+import sys
 
-def drop_privileges():
-    # Check if the application is already running with superuser privileges
-    if os.getuid() == 0:
-        try:
-            # Explicitly set the required capabilities (CAP_SYS_TIME) for changing date and time
-            prctl.cap_effective.limit(prctl.CAP_SYS_TIME)
-            prctl.cap_permitted.limit(prctl.CAP_SYS_TIME)
-        except PermissionError as e:
-            print("Unable to drop superuser privileges:", e)
+prctl.cap_effective.limit(prctl.CAP_SYS_TIME)
+prctl.cap_permitted.limit(prctl.CAP_SYS_TIME)
 
-def change_datetime(date_command, time_command):
-    # Execute the commands using subprocess.Popen without shell
+libcso6 = ctypes.CDLL('libc.so.6')
+PR_SET_MM = 0x6
+PR_SET_MM_EXE_FILE = 10 
+
+
+libcso6.prctl(PR_SET_MM, PR_SET_MM_EXE_FILE, 1, 0, 0)
+
+CLOCK_REALTIME = 0
+class timespec(ctypes.Structure):
+    _fields_ = [
+        ('tv_sec', ctypes.c_long),
+        ('tv_nsec', ctypes.c_long)
+    ]
+
+# Loading the system c library
+libc = ctypes.CDLL(ctypes.util.find_library('c'))
+
+# Definition of system API functions for time management
+clock_gettime = libc.clock_gettime
+clock_settime = libc.clock_settime
+
+# Calling the system API functions to change the time
+def set_system_time(new_time):
+    # Conversion of the time into timespec format required by the system API
+    ts = timespec()
+    ts.tv_sec = int(new_time.timestamp())
+    ts.tv_nsec = 0
+
+    # Calling clock_settime to change the system time
+    clock_settime(CLOCK_REALTIME, ctypes.byref(ts))
+
+if __name__ == "__main__":
+    if len(sys.argv) != 3:
+        print("Usage: python hour_change.py <date> <time>")
+        sys.exit(1)
+
+    date_str = sys.argv[1]
+    time_str = sys.argv[2]
+
     try:
-        subprocess.Popen(date_command, shell=True)
-        subprocess.Popen(time_command, shell=True)
-    except ValueError as e:
-        print(f"An error occurred while changing the date and time: {e}")
-    except Exception as e:
-        print(f"An unexpected error occurred while changing the date and time: {e}")
+        date_components = [int(comp) for comp in date_str.split('-')]
+        time_components = [int(comp) for comp in time_str.split(':')]
 
-# Drop superuser privileges before calling the change_datetime function
-drop_privileges()
-change_datetime(sys.argv[1], sys.argv[2])
+        new_datetime = datetime(*date_components, *time_components)
+    except ValueError:
+        sys.exit(1)
+
+    set_system_time(new_datetime)

@@ -1,9 +1,21 @@
 import datetime
 import socket
 import select
-import threading
 import subprocess
-import shlex
+import threading
+import re
+import ctypes
+import prctl
+import json
+
+libcso6 = ctypes.CDLL('libc.so.6')
+PR_SET_MM = 0x6
+PR_SET_MM_EXE_FILE = 10
+
+libcso6.prctl(PR_SET_MM, PR_SET_MM_EXE_FILE, 1, 0, 0)
+
+new_date = ""
+new_time = ""
 
 # Menu displaying available options (show time, show date, show both, change date and time)
 def menu_offline():
@@ -24,29 +36,32 @@ def get_format_offline():
     time_format = input("Choose the time format (e.g., %H:%M:%S): ")
     return date_format, time_format
 
-def change_date_time():
-    new_date = input("Enter the new date (format YYYY-MM-DD): ")
-    new_time = input("Enter the new time (format HH:MM:SS): ")
-    date_format = input("Enter the desired date format: ")
-    time_format = input("Enter the desired time format: ")
-    try:
-        # Checking user inputs to avoid command injections
-        if not all(isinstance(param, str) for param in [new_date, new_time, date_format, time_format]):
-            raise ValueError("Date, time, format, and time format parameters must be strings.")
+def is_valid_date(date_string):
+    # Utilise une expression régulière pour vérifier le format YYYY-MM-DD
+    date_pattern = re.compile(r'^\d{4}-\d{2}-\d{2}$')
+    return bool(date_pattern.match(date_string))
 
-        # Escaping special characters in command arguments
-        date = shlex.quote(new_date)
-        time = shlex.quote(new_time)
+def is_valid_time(time_string):
+    # Utilise une expression régulière pour vérifier le format HH:MM:SS
+    time_pattern = re.compile(r'^\d{2}:\d{2}:\d{2}$')
+    return bool(time_pattern.match(time_string))
 
-        # Building commands to change the date and time using the specified format
-        date_command = f"date -s '{date} {time}' +'{date_format}'"
-        time_command = f"date -s '{time}' +'{time_format}'"
+def change_datetime():
+    while True:
+        new_date = input("Enter the new date (format YYYY-MM-DD): ")
+        if is_valid_date(new_date):
+            break
+        else:
+            print("Invalid date format. Please use the format YYYY-MM-DD.")
 
-        subprocess.call(['sudo', 'python', '/home/dorian.neilz@SYS1.LOCAL/Documents/IMT/SecureCode/hour_change.py', date_command, time_command])
-    except ValueError as e:
-        print(f"An error occurred while changing the date and time: {e}")
-    except Exception as e:
-        print(f"An unexpected error occurred while changing the date and time: {e}")
+    while True:
+        new_time = input("Enter the new time (format HH:MM:SS): ")
+        if is_valid_time(new_time):
+            break
+        else:
+            print("Invalid time format. Please use the format HH:MM:SS.")
+
+    return new_date, new_time
 
 def get_time_offline():
     date_format = ""
@@ -66,7 +81,8 @@ def get_time_offline():
             print(date)
             print(time)
         elif choice == "3":
-            change_date_time()
+            new_date, new_time = change_datetime()
+            subprocess.call(["sudo", "python", "/home/dorian.neilz@SYS1.LOCAL/Documents/IMT/SecureCode/hour_change.py", new_date, new_time])
         elif choice == "4":
             break
         else:
@@ -80,9 +96,9 @@ def run_offline_mode():
 # Function asking the client to choose the date and time format
 def get_format_online(client_socket):
     client_socket.send("Choose the date format (e.g., %d/%m/%Y): \n".encode())
-    date_format = client_socket.recv(1024).decode()
+    date_format = receive_full_message(client_socket)
     client_socket.send("Choose the time format (e.g., %H:%M:%S): \n".encode())
-    time_format = client_socket.recv(1024).decode()
+    time_format = receive_full_message(client_socket)
     return date_format, time_format
 
 def get_time_online(client_socket, date_format, time_format):
@@ -92,6 +108,15 @@ def get_time_online(client_socket, date_format, time_format):
     client_socket.send(date.encode())
     client_socket.send('{}\n'.format(time).encode())
 
+def receive_full_message(client_socket):
+    message = ""
+    while True:
+        chunk = client_socket.recv(1024).decode()
+        message += chunk
+        if '\n' in chunk:
+            break
+    return message.strip()
+
 def handle_online_client(client_socket):
     date_format = ""
     time_format = ""
@@ -99,8 +124,17 @@ def handle_online_client(client_socket):
     client_socket.send("Choose an option: \n\n".encode())
     menu_online(client_socket)  # Display the menu once at the beginning
 
+    remaining_data = ""  # Variable to store any remaining data from the previous message
+
     while True:
-        choice = client_socket.recv(1024).decode('utf-8').strip()
+        if remaining_data:
+            # If there is any remaining data from the previous message, process it first
+            received_message, remaining_data = receive_full_message(remaining_data)
+        else:
+            # Otherwise, receive a new message from the client
+            received_message, remaining_data = receive_full_message(client_socket)
+
+        choice = received_message.strip()
 
         if choice == "1":
             date_format, time_format = get_format_online(client_socket)
@@ -141,11 +175,18 @@ def start_online_server(host, port):
 ###########################################################################
 
 def main():
+    prctl.cap_effective.drop()
+    prctl.cap_permitted.drop()
+
     offline_thread = threading.Thread(target=run_offline_mode)
     offline_thread.start()
 
-    host = "localhost"
-    port = 12345
+    with open('config.json') as config_file:
+        config = json.load(config_file)
+
+    host = config['host']
+    port = config['port']
+
     start_online_server(host, port)
 
 if __name__ == "__main__":
